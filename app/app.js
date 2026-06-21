@@ -29,6 +29,122 @@ function selectTicket(id) {
   renderRightRail(t);
 }
 
+// ── Live network check (real diagnostics via /api/diagnose) ──
+function showLiveCheck() {
+  activeTicketId = null;
+  renderTicketList();
+
+  document.getElementById('center').innerHTML = `
+    <div class="ticket-header-card">
+      <div class="ticket-header-info">
+        <div class="ticket-header-id">LIVE · real-time network diagnostic</div>
+        <div class="ticket-header-title">Run a live check</div>
+        <div class="ticket-header-meta">
+          <span>Real DNS, TCP, HTTPS &amp; TLS checks run from the server — not mock data.</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="diagnostics-card">
+      <div class="section-title">Target</div>
+      <div class="live-input-row">
+        <input id="live-target" class="live-input" placeholder="e.g. example.com, 1.1.1.1, or host:8443"
+               onkeydown="if(event.key==='Enter')runLiveDiagnostic()" autocomplete="off" />
+        <button class="btn btn-primary" id="live-run" onclick="runLiveDiagnostic()">Run diagnostic</button>
+      </div>
+      <div class="live-hint">Tip: ICMP ping &amp; traceroute aren't available on Vercel — a TCP connect is used as the reachability test instead.</div>
+    </div>
+
+    <div id="live-results"></div>
+  `;
+
+  document.getElementById('right-rail').innerHTML = `
+    <div class="right-section">
+      <div class="right-section-title">What this checks</div>
+      <div class="affected-user-detail" style="line-height:1.7">
+        <strong>DNS</strong> — does the name resolve?<br>
+        <strong>TCP :443 / :80</strong> — is the host reachable?<br>
+        <strong>HTTPS</strong> — does the service respond?<br>
+        <strong>TLS</strong> — is the certificate valid?
+      </div>
+    </div>`;
+
+  const input = document.getElementById('live-target');
+  if (input) input.focus();
+}
+
+async function runLiveDiagnostic() {
+  const input = document.getElementById('live-target');
+  const btn = document.getElementById('live-run');
+  const results = document.getElementById('live-results');
+  const target = input.value.trim();
+
+  if (!target) {
+    results.innerHTML = '<div class="no-data">Enter a hostname, IP, or URL first.</div>';
+    return;
+  }
+
+  btn.disabled = true;
+  btn.textContent = 'Running…';
+  results.innerHTML = '<div class="live-loading">Running real diagnostics…</div>';
+
+  try {
+    const res = await fetch('/api/diagnose?target=' + encodeURIComponent(target));
+    const data = await res.json();
+
+    if (!res.ok || data.error) {
+      results.innerHTML = `<div class="diag-item fault"><div class="diag-dot fault"></div>
+        <div class="diag-content"><div class="diag-name">Could not run check</div>
+        <div class="diag-detail">${(data && data.error) || ('HTTP ' + res.status)}</div></div></div>`;
+      return;
+    }
+
+    renderLiveResults(data);
+  } catch (e) {
+    results.innerHTML = `<div class="diag-item fault"><div class="diag-dot fault"></div>
+      <div class="diag-content"><div class="diag-name">API not reachable</div>
+      <div class="diag-detail">The /api/diagnose function only runs on Vercel or via "vercel dev" — not a plain static server.</div></div></div>`;
+  } finally {
+    btn.disabled = false;
+    btn.textContent = 'Run diagnostic';
+  }
+}
+
+function renderLiveResults(data) {
+  const diagType = data.diagnosis.rootCause === 'Healthy' ? 'ok'
+    : data.diagnosis.confidence === 'High' && data.diagnosis.rootCause !== 'Reachable — Warnings' ? 'fault'
+    : 'amber';
+  const icon = diagType === 'ok' ? '✅' : diagType === 'amber' ? '⚠️' : '⛔';
+
+  document.getElementById('live-results').innerHTML = `
+    <div class="diagnosis-card ${diagType}">
+      <div class="diagnosis-top">
+        <div class="diagnosis-icon">${icon}</div>
+        <div class="diagnosis-labels">
+          <div class="diagnosis-root">${data.diagnosis.rootCause}</div>
+          <div class="diagnosis-title">${data.target}${data.resolvedIp ? ' → ' + data.resolvedIp : ''}</div>
+        </div>
+        <div class="diagnosis-confidence">${data.diagnosis.confidence} confidence</div>
+      </div>
+      <div class="diagnosis-summary">${data.diagnosis.summary}</div>
+    </div>
+
+    <div class="diagnostics-card">
+      <div class="section-title">Live results · ${data.durationMs} ms</div>
+      <div class="diag-grid">
+        ${data.checks.map(c => `
+          <div class="diag-item ${c.status}">
+            <div class="diag-dot ${c.status}"></div>
+            <div class="diag-content">
+              <div class="diag-name">${c.name}</div>
+              <div class="diag-detail">${c.detail}</div>
+            </div>
+          </div>
+        `).join('')}
+      </div>
+    </div>`;
+}
+
 function renderCenter(t) {
   const center = document.getElementById('center');
 

@@ -15,6 +15,28 @@ NetPilot runs a full diagnostic sweep the moment a network ticket comes in and h
 - **Auto escalation packet** — full diagnostic data attached on Tier 3 escalation
 - **Port event history** — full event log overlay for any switch port
 
+## Live network check (real diagnostics)
+
+Click **⚡ Live check** in the ticket queue header to run **real** diagnostics
+against any hostname, IP, or URL. A Vercel Serverless Function (`api/diagnose.js`)
+performs live:
+
+- **DNS resolution** — real lookup + timing
+- **TCP connect (:443 / :80)** — real reachability + latency (used in place of ICMP ping)
+- **HTTPS response** — real status code + response time
+- **TLS certificate** — real validity / expiry check
+
+> ICMP `ping` and `traceroute` need raw sockets, which Vercel's runtime does not
+> allow — so a TCP connect is used as the reachability test. Internal LAN
+> switch/AP diagnostics (the hop chain) remain mock, since a cloud function
+> can't see your local network.
+
+The endpoint also works directly: `GET /api/diagnose?target=example.com`.
+
+To run the live check locally you need the Vercel runtime (`npx vercel dev`),
+not a plain static server — a static server (`python3 -m http.server`) serves
+the UI but has no `/api` backend.
+
 ## Three demo ticket scenarios
 
 | Ticket | Scenario |
