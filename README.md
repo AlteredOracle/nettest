@@ -6,13 +6,17 @@ NetPilot runs a full diagnostic sweep the moment a network ticket comes in and h
 
 ## Features
 
-- **Auto diagnostic sweep** — ping, traceroute, DNS, VPN, switch port, Wi-Fi/AP health, recent config changes
-- **Plain-English diagnosis** — e.g. "Packet loss starts at hop 4 (SW-12). Likely cause: switch port flapping"
+**Live diagnostics (real):**
+
+- **Live network check** — real DNS, TCP reachability, HTTPS response & TLS certificate checks against any host/IP/URL (`⚡ Live check`)
+- **Ticket intake** — file a ticket with a target; it's auto-diagnosed and saved to a shared team queue (`+ New ticket`)
+- **Plain-English verdict** — every check produces a root cause + red/amber/green grid
+
+**Demo scenarios (mock data):**
+
 - **Topology hop chain** — visual path from user → AP → switch → core → WAN with faulted hops shown in red
-- **Color-coded diagnostic grid** — red/amber/green per check
 - **Similar past tickets** — pattern matching with resolutions
 - **Other affected users** — storm/outage detection
-- **Auto escalation packet** — full diagnostic data attached on Tier 3 escalation
 - **Port event history** — full event log overlay for any switch port
 
 ## Live network check (real diagnostics)
@@ -74,11 +78,19 @@ static server — a static server (`python3 -m http.server`) serves the UI but h
 
 [![Deploy with Vercel](https://vercel.com/button)](https://vercel.com/new/clone?repository-url=https://github.com/IMGeman/NetTest)
 
-The static UI in `app/` deploys to Vercel with no build step. `vercel.json`
-already sets the output directory to `app`, so importing the repo and clicking
-**Deploy** is all that's needed. Every push to `main` then auto-deploys.
+No build step. `vercel.json` serves the static UI from `app/`, and Vercel
+auto-detects the Serverless Functions in `api/` (`diagnose.js`, `tickets.js`).
+Importing the repo and clicking **Deploy** is all that's needed; every push to
+`main` then auto-deploys.
 
-> Only the web UI deploys — the Electron desktop shell (`main.js`) does not run on Vercel.
+> Only the web UI + API deploy — the Electron desktop shell (`main.js`) does not run on Vercel.
+
+### Team access — Deployment Protection
+
+By default Vercel **Deployment Protection** (Vercel Authentication) restricts the
+site/API to people logged into your Vercel account — anyone else gets `401`. For a
+shared help-desk tool, turn it off (or set a shared bypass) at
+**Project Settings → Deployment Protection**.
 
 ## Run in browser
 
@@ -106,11 +118,15 @@ Download the installer from **Actions → Build Windows Installer → Artifacts 
 ## Tech stack
 
 - **UI**: HTML/CSS/JS — no build step, no framework
+- **Backend**: Vercel Serverless Functions (`api/`) — real DNS/TCP/HTTPS/TLS checks via Node built-ins, no dependencies
+- **Storage**: Upstash Redis (REST API) for the shared ticket queue
 - **Fonts**: IBM Plex Sans (UI) + IBM Plex Mono (technical data)
 - **Desktop**: Electron + electron-builder
 - **CI**: GitHub Actions (Windows NSIS installer)
-- **Data**: Mock only — no real backend
+- **Data**: live checks are real; the three demo tickets and the topology/hop-chain remain mock
 
 ---
 
-*MVP scope: read-only diagnostics, no auto-remediation. Real SNMP/API integrations, auth, and ITSM embedding are the next phase.*
+*Scope: read-only diagnostics, no auto-remediation. Live checks see the internet's
+view of a host — ICMP ping/traceroute and internal-LAN (switch/AP) diagnostics need
+an on-prem agent and remain mock. Auth and ITSM embedding are the next phase.*
