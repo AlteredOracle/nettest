@@ -36,7 +36,9 @@ const clip = (v, n) => String(v || '').trim().slice(0, n);
 module.exports = async (req, res) => {
   if (!store.isConfigured()) {
     res.status(503).json({
-      error: 'Ticket storage is not configured. Create an Upstash Redis store in your Vercel project (Storage → Upstash → Redis) and redeploy.'
+      error: 'Ticket storage is not configured. Create an Upstash Redis store in your Vercel project (Storage → Upstash → Redis) and redeploy.',
+      detectedCredentialEnvVars: store.detectedCredentialKeys(),
+      expected: ['UPSTASH_REDIS_REST_URL', 'UPSTASH_REDIS_REST_TOKEN', 'or KV_REST_API_URL', 'KV_REST_API_TOKEN']
     });
     return;
   }

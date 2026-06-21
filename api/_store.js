@@ -12,6 +12,12 @@ function isConfigured() {
   return !!creds();
 }
 
+// Names (never values) of any Redis/KV/Upstash env vars Vercel injected.
+// Safe to surface — helps diagnose a name mismatch without leaking secrets.
+function detectedCredentialKeys() {
+  return Object.keys(process.env).filter(k => /(REDIS|KV|UPSTASH)/i.test(k)).sort();
+}
+
 // Run a single Redis command, e.g. ['LPUSH', key, value].
 async function redis(command) {
   const c = creds();
@@ -43,4 +49,4 @@ async function listTickets() {
     .filter(Boolean);
 }
 
-module.exports = { isConfigured, addTicket, listTickets };
+module.exports = { isConfigured, detectedCredentialKeys, addTicket, listTickets };
