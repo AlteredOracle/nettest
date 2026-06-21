@@ -1,0 +1,72 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>NetPilot — Network Diagnostics</title>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+
+<div class="app">
+
+  <!-- Top bar -->
+  <div class="topbar">
+    <div class="topbar-logo">
+      <svg width="20" height="20" viewBox="0 0 20 20" fill="none" xmlns="http://www.w3.org/2000/svg">
+        <circle cx="10" cy="10" r="9" stroke="#4f52d3" stroke-width="2"/>
+        <circle cx="10" cy="10" r="3" fill="#4f52d3"/>
+        <line x1="10" y1="1" x2="10" y2="4" stroke="#4f52d3" stroke-width="1.5" stroke-linecap="round"/>
+        <line x1="10" y1="16" x2="10" y2="19" stroke="#4f52d3" stroke-width="1.5" stroke-linecap="round"/>
+        <line x1="1" y1="10" x2="4" y2="10" stroke="#4f52d3" stroke-width="1.5" stroke-linecap="round"/>
+        <line x1="16" y1="10" x2="19" y2="10" stroke="#4f52d3" stroke-width="1.5" stroke-linecap="round"/>
+      </svg>
+      NetPilot
+    </div>
+    <div class="topbar-divider"></div>
+    <div class="topbar-context">Service Desk · Network Diagnostics</div>
+    <div class="topbar-right">
+      <div class="badge-live">3 active</div>
+    </div>
+  </div>
+
+  <!-- Left rail: ticket queue -->
+  <div class="left-rail">
+    <div class="rail-header">Ticket queue</div>
+    <div id="ticket-list"></div>
+  </div>
+
+  <!-- Center: diagnosis -->
+  <div class="center" id="center">
+    <div class="empty-state">
+      <div class="empty-icon">🔍</div>
+      <div class="empty-title">Select a ticket</div>
+      <div class="empty-sub">Choose a ticket from the queue to run diagnostics</div>
+    </div>
+  </div>
+
+  <!-- Right rail: context -->
+  <div class="right-rail" id="right-rail">
+    <div class="empty-state">
+      <div class="empty-icon">📋</div>
+      <div class="empty-title">No ticket selected</div>
+    </div>
+  </div>
+
+</div>
+
+<!-- Port history modal -->
+<div class="modal-overlay" id="modal" onclick="if(event.target===this)closeModal()">
+  <div class="modal">
+    <div class="modal-header">
+      <div class="modal-title" id="modal-title">Event History</div>
+      <button class="modal-close" onclick="closeModal()">✕</button>
+    </div>
+    <div class="modal-body" id="modal-body"></div>
+  </div>
+</div>
+
+<script src="data.js"></script>
+<script src="app.js"></script>
+</body>
+</html>
