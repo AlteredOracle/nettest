@@ -33,9 +33,34 @@ performs live:
 
 The endpoint also works directly: `GET /api/diagnose?target=example.com`.
 
-To run the live check locally you need the Vercel runtime (`npx vercel dev`),
-not a plain static server — a static server (`python3 -m http.server`) serves
-the UI but has no `/api` backend.
+## Ticket intake (shared queue)
+
+Click **+ New ticket** (top bar) to file a ticket: describe the problem and give
+a target (host / IP / URL). On submit, NetPilot runs the real diagnostics, attaches
+a plain-English verdict, and saves the ticket to a **shared queue** every agent sees.
+
+API:
+
+- `GET  /api/tickets` — list tickets (newest first)
+- `POST /api/tickets` — `{ title, target, user, location }` → diagnoses + stores, returns the ticket
+
+### Storage setup (one-time)
+
+The shared queue is backed by **Upstash Redis** (called over its REST API — no npm
+dependency). To enable it:
+
+1. In your Vercel project: **Storage → Upstash → Redis → Create**, and connect it
+   to this project.
+2. This injects `UPSTASH_REDIS_REST_URL` / `UPSTASH_REDIS_REST_TOKEN`
+   (or `KV_REST_API_URL` / `KV_REST_API_TOKEN`) as env vars — the API reads either.
+3. **Redeploy.**
+
+Until storage is configured, `/api/tickets` returns a `503` explaining the above,
+and the UI runs in demo-only mode (the three mock tickets still work).
+
+To run the API locally you need the Vercel runtime (`npx vercel dev`), not a plain
+static server — a static server (`python3 -m http.server`) serves the UI but has no
+`/api` backend.
 
 ## Three demo ticket scenarios
 

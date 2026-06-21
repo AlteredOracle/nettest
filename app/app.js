@@ -1,32 +1,193 @@
 let activeTicketId = null;
+let liveTickets = [];
 
 function init() {
   renderTicketList();
   selectTicket(tickets[0].id);
+  loadLiveTickets();
+}
+
+// Pull the shared ticket queue from the server (Vercel + Redis). Silently
+// no-ops on a plain static server or before storage is configured.
+async function loadLiveTickets() {
+  try {
+    const res = await fetch('/api/tickets');
+    if (!res.ok) return;
+    const data = await res.json();
+    liveTickets = Array.isArray(data.tickets) ? data.tickets : [];
+    renderTicketList();
+  } catch (e) { /* no /api backend — demo-only mode */ }
+}
+
+function escapeHtml(s) {
+  return String(s == null ? '' : s).replace(/[&<>"']/g,
+    c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+}
+
+function ticketTime(iso) {
+  try { return new Date(iso).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }); }
+  catch (e) { return ''; }
 }
 
 function renderTicketList() {
   const list = document.getElementById('ticket-list');
-  list.innerHTML = tickets.map(t => `
+  const itemHtml = (t, isLive) => `
     <div class="ticket-item ${activeTicketId === t.id ? 'active' : ''}"
          onclick="selectTicket('${t.id}')" data-id="${t.id}">
       <div class="ticket-meta">
         <span class="priority-dot ${t.priority}"></span>
-        <span class="ticket-id">${t.id}</span>
-        <span class="ticket-time">${t.time}</span>
+        <span class="ticket-id">${escapeHtml(t.id)}</span>
+        ${isLive ? '<span class="live-tag">LIVE</span>' : ''}
+        <span class="ticket-time">${isLive ? ticketTime(t.createdAt) : t.time}</span>
       </div>
-      <div class="ticket-title">${t.title}</div>
-      <div class="ticket-user">${t.user} · ${t.location}</div>
-    </div>
-  `).join('');
+      <div class="ticket-title">${escapeHtml(t.title)}</div>
+      <div class="ticket-user">${escapeHtml(t.user)} · ${escapeHtml(t.location)}</div>
+    </div>`;
+
+  list.innerHTML =
+    liveTickets.map(t => itemHtml(t, true)).join('') +
+    tickets.map(t => itemHtml(t, false)).join('');
+
+  const badge = document.querySelector('.badge-live');
+  if (badge) badge.textContent = (liveTickets.length + tickets.length) + ' active';
 }
 
 function selectTicket(id) {
   activeTicketId = id;
   renderTicketList();
+  const live = liveTickets.find(t => t.id === id);
+  if (live) { renderLiveTicketCenter(live); return; }
   const t = tickets.find(t => t.id === id);
   renderCenter(t);
   renderRightRail(t);
+}
+
+// ── New-ticket intake form ──
+function showNewTicketForm() {
+  activeTicketId = null;
+  renderTicketList();
+
+  document.getElementById('center').innerHTML = `
+    <div class="ticket-header-card">
+      <div class="ticket-header-info">
+        <div class="ticket-header-id">NEW · submit a network ticket</div>
+        <div class="ticket-header-title">Report a problem</div>
+        <div class="ticket-header-meta">
+          <span>It's auto-diagnosed against the target the moment you submit.</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="diagnostics-card">
+      <div class="section-title">New ticket</div>
+      <div class="form-grid">
+        <label class="form-field full">
+          <span class="form-label">What's the problem?</span>
+          <input id="nt-title" class="live-input" placeholder="e.g. Can't reach the booking site" autocomplete="off" />
+        </label>
+        <label class="form-field full">
+          <span class="form-label">Target to test — host, IP, or URL</span>
+          <input id="nt-target" class="live-input" placeholder="e.g. booking.example.com"
+                 onkeydown="if(event.key==='Enter')submitNewTicket()" autocomplete="off" />
+        </label>
+        <label class="form-field">
+          <span class="form-label">Your name</span>
+          <input id="nt-user" class="live-input" placeholder="e.g. Marcus Chen" autocomplete="off" />
+        </label>
+        <label class="form-field">
+          <span class="form-label">Location</span>
+          <input id="nt-location" class="live-input" placeholder="e.g. Floor 3, West Wing" autocomplete="off" />
+        </label>
+      </div>
+      <div class="live-input-row" style="margin-top:14px">
+        <button class="btn btn-primary" id="nt-submit" onclick="submitNewTicket()">Submit &amp; diagnose</button>
+      </div>
+      <div id="nt-error" class="live-hint"></div>
+    </div>`;
+
+  document.getElementById('right-rail').innerHTML = `
+    <div class="right-section">
+      <div class="right-section-title">How it works</div>
+      <div class="affected-user-detail" style="line-height:1.7">
+        On submit, NetPilot runs real DNS, TCP, HTTPS &amp; TLS checks against your
+        target, attaches a plain-English verdict, and drops the ticket into the
+        shared queue for the whole team.
+      </div>
+    </div>`;
+
+  const el = document.getElementById('nt-title');
+  if (el) el.focus();
+}
+
+async function submitNewTicket() {
+  const title = document.getElementById('nt-title').value.trim();
+  const target = document.getElementById('nt-target').value.trim();
+  const user = document.getElementById('nt-user').value.trim();
+  const location = document.getElementById('nt-location').value.trim();
+  const errEl = document.getElementById('nt-error');
+  const btn = document.getElementById('nt-submit');
+
+  if (!title) { errEl.textContent = 'Please describe the problem.'; return; }
+  if (!target) { errEl.textContent = 'Please enter a target to test.'; return; }
+
+  btn.disabled = true;
+  btn.textContent = 'Diagnosing…';
+  errEl.textContent = '';
+
+  try {
+    const res = await fetch('/api/tickets', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ title, target, user, location })
+    });
+    const data = await res.json();
+
+    if (!res.ok || data.error) {
+      errEl.textContent = data.error || ('HTTP ' + res.status);
+      btn.disabled = false;
+      btn.textContent = 'Submit & diagnose';
+      return;
+    }
+
+    liveTickets.unshift(data.ticket);
+    selectTicket(data.ticket.id);
+  } catch (e) {
+    errEl.textContent = 'Could not submit — the /api backend only runs on Vercel (or via "vercel dev").';
+    btn.disabled = false;
+    btn.textContent = 'Submit & diagnose';
+  }
+}
+
+// ── Render a stored live ticket (real diagnostic result) ──
+function renderLiveTicketCenter(t) {
+  const d = t.diagnostic;
+  document.getElementById('center').innerHTML = `
+    <div class="ticket-header-card">
+      <div class="ticket-header-info">
+        <div class="ticket-header-id">${escapeHtml(t.id)} · opened ${ticketTime(t.createdAt)} · live ticket</div>
+        <div class="ticket-header-title">${escapeHtml(t.title)}</div>
+        <div class="ticket-header-meta">
+          <span>👤 ${escapeHtml(t.user)}</span>
+          <span>📍 ${escapeHtml(t.location)}</span>
+          <span>🎯 <span style="font-family:var(--mono)">${escapeHtml(t.target)}</span></span>
+        </div>
+      </div>
+    </div>
+    ${diagnosticHtml(d)}
+    <div class="actions-row">
+      <button class="btn btn-secondary" onclick="showNewTicketForm()">+ New ticket</button>
+    </div>`;
+
+  document.getElementById('right-rail').innerHTML = `
+    <div class="right-section">
+      <div class="right-section-title">Ticket detail</div>
+      <div class="affected-user-detail" style="line-height:1.9">
+        <strong>ID</strong> ${escapeHtml(t.id)}<br>
+        <strong>Opened</strong> ${escapeHtml(new Date(t.createdAt).toLocaleString())}<br>
+        <strong>Target</strong> <span style="font-family:var(--mono)">${escapeHtml(t.target)}</span><br>
+        <strong>Verdict</strong> ${escapeHtml(d.diagnosis.rootCause)}
+      </div>
+    </div>`;
 }
 
 // ── Live network check (real diagnostics via /api/diagnose) ──
@@ -110,23 +271,24 @@ async function runLiveDiagnostic() {
   }
 }
 
-function renderLiveResults(data) {
+// Shared renderer for a diagnostic result (used by live check + live tickets).
+function diagnosticHtml(data) {
   const diagType = data.diagnosis.rootCause === 'Healthy' ? 'ok'
-    : data.diagnosis.confidence === 'High' && data.diagnosis.rootCause !== 'Reachable — Warnings' ? 'fault'
-    : 'amber';
+    : data.diagnosis.rootCause === 'Reachable — Warnings' ? 'amber'
+    : data.diagnosis.confidence === 'High' ? 'fault' : 'amber';
   const icon = diagType === 'ok' ? '✅' : diagType === 'amber' ? '⚠️' : '⛔';
 
-  document.getElementById('live-results').innerHTML = `
+  return `
     <div class="diagnosis-card ${diagType}">
       <div class="diagnosis-top">
         <div class="diagnosis-icon">${icon}</div>
         <div class="diagnosis-labels">
-          <div class="diagnosis-root">${data.diagnosis.rootCause}</div>
-          <div class="diagnosis-title">${data.target}${data.resolvedIp ? ' → ' + data.resolvedIp : ''}</div>
+          <div class="diagnosis-root">${escapeHtml(data.diagnosis.rootCause)}</div>
+          <div class="diagnosis-title">${escapeHtml(data.target)}${data.resolvedIp ? ' → ' + escapeHtml(data.resolvedIp) : ''}</div>
         </div>
-        <div class="diagnosis-confidence">${data.diagnosis.confidence} confidence</div>
+        <div class="diagnosis-confidence">${escapeHtml(data.diagnosis.confidence)} confidence</div>
       </div>
-      <div class="diagnosis-summary">${data.diagnosis.summary}</div>
+      <div class="diagnosis-summary">${escapeHtml(data.diagnosis.summary)}</div>
     </div>
 
     <div class="diagnostics-card">
@@ -136,13 +298,17 @@ function renderLiveResults(data) {
           <div class="diag-item ${c.status}">
             <div class="diag-dot ${c.status}"></div>
             <div class="diag-content">
-              <div class="diag-name">${c.name}</div>
-              <div class="diag-detail">${c.detail}</div>
+              <div class="diag-name">${escapeHtml(c.name)}</div>
+              <div class="diag-detail">${escapeHtml(c.detail)}</div>
             </div>
           </div>
         `).join('')}
       </div>
     </div>`;
+}
+
+function renderLiveResults(data) {
+  document.getElementById('live-results').innerHTML = diagnosticHtml(data);
 }
 
 function renderCenter(t) {

@@ -191,6 +191,43 @@ body {
   font-family: var(--mono);
 }
 
+/* ── Topbar new-ticket button ── */
+.topbar-btn {
+  padding: 6px 12px;
+  font-size: 12px;
+}
+
+/* ── Live ticket tag ── */
+.live-tag {
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.5px;
+  color: var(--accent);
+  background: var(--accent-light);
+  padding: 1px 5px;
+  border-radius: 8px;
+}
+
+/* ── New ticket form ── */
+.form-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+}
+
+.form-field {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+.form-field.full { grid-column: 1 / -1; }
+
+.form-label {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text2);
+}
+
 .ticket-item {
   padding: 12px 16px;
   border-bottom: 1px solid var(--border);
