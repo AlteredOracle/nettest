@@ -2,6 +2,7 @@
   "name": "netpilot",
   "version": "1.0.0",
   "description": "NetPilot — Network diagnostics for Service Desk agents",
+  "author": "NetPilot",
   "main": "main.js",
   "scripts": {
     "start": "electron .",
