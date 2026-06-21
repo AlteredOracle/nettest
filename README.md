@@ -10,6 +10,7 @@ NetPilot runs a full diagnostic sweep the moment a network ticket comes in and h
 
 - **Live network check** — real DNS, TCP reachability, HTTPS response & TLS certificate checks against any host/IP/URL (`⚡ Live check`)
 - **Ticket intake** — file a ticket with a target; it's auto-diagnosed and saved to a shared team queue (`+ New ticket`)
+- **Resolve / reopen / delete** tickets, **filter** the queue by All / Open / Resolved, and **auto-refresh** (every 15s) so the shared queue stays current
 - **Plain-English verdict** — every check produces a root cause + red/amber/green grid
 
 **Demo scenarios (mock data):**
@@ -45,8 +46,13 @@ a plain-English verdict, and saves the ticket to a **shared queue** every agent 
 
 API:
 
-- `GET  /api/tickets` — list tickets (newest first)
-- `POST /api/tickets` — `{ title, target, user, location }` → diagnoses + stores, returns the ticket
+- `GET    /api/tickets` — list tickets (newest first)
+- `POST   /api/tickets` — `{ title, target, user, location }` → diagnoses + stores, returns the ticket
+- `PATCH  /api/tickets` — `{ id, status: 'open' | 'resolved' }` → update status
+- `DELETE /api/tickets?id=TKT-…` — delete a ticket
+
+Tickets are stored in a Redis hash keyed by id (so update/delete are single ops),
+each carrying a `status` (`open`/`resolved`) and timestamps.
 
 ### Storage setup (one-time)
 

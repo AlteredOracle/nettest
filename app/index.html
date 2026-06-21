@@ -37,6 +37,11 @@
       <span>Ticket queue</span>
       <button class="live-check-btn" onclick="showLiveCheck()">⚡ Live check</button>
     </div>
+    <div class="queue-filter">
+      <button class="qf-btn active" data-f="all" onclick="setFilter('all')">All</button>
+      <button class="qf-btn" data-f="open" onclick="setFilter('open')">Open</button>
+      <button class="qf-btn" data-f="resolved" onclick="setFilter('resolved')">Resolved</button>
+    </div>
     <div id="ticket-list"></div>
   </div>
 

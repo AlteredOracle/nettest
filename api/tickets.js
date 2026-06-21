@@ -1,7 +1,9 @@
 // NetPilot — ticket intake + shared queue.
-//   GET  /api/tickets        → list tickets (newest first)
-//   POST /api/tickets        → { title, target, user, location }
-//                              runs real diagnostics, stores the ticket, returns it
+//   GET    /api/tickets            → list tickets (newest first)
+//   POST   /api/tickets            → { title, target, user, location }
+//                                     runs real diagnostics, stores the ticket, returns it
+//   PATCH  /api/tickets            → { id, status: 'open' | 'resolved' }  → update status
+//   DELETE /api/tickets?id=TKT-…   → delete a ticket
 const { runDiagnostics } = require('./_diagnostics.js');
 const store = require('./_store.js');
 
@@ -68,11 +70,40 @@ module.exports = async (req, res) => {
         title, user, location,
         target: diagnostic.target,
         createdAt: new Date().toISOString(),
+        status: 'open',
+        resolvedAt: null,
         priority: priorityFromDiagnosis(diagnostic.diagnosis),
         diagnostic
       };
       await store.addTicket(ticket);
       res.status(201).json({ ticket });
+      return;
+    }
+
+    const idParam = (req.query && req.query.id) ||
+      (req.url && new URL(req.url, 'http://x').searchParams.get('id'));
+
+    if (req.method === 'PATCH') {
+      const body = await readBody(req);
+      const id = clip(body.id || idParam, 40);
+      const status = body.status === 'resolved' ? 'resolved' : 'open';
+      if (!id) { res.status(400).json({ error: 'A ticket id is required.' }); return; }
+
+      const ticket = await store.getTicket(id);
+      if (!ticket) { res.status(404).json({ error: 'Ticket not found.' }); return; }
+
+      ticket.status = status;
+      ticket.resolvedAt = status === 'resolved' ? new Date().toISOString() : null;
+      await store.updateTicket(ticket);
+      res.status(200).json({ ticket });
+      return;
+    }
+
+    if (req.method === 'DELETE') {
+      const id = clip(idParam, 40);
+      if (!id) { res.status(400).json({ error: 'A ticket id is required.' }); return; }
+      const ok = await store.deleteTicket(id);
+      res.status(ok ? 200 : 404).json(ok ? { deleted: id } : { error: 'Ticket not found.' });
       return;
     }
 

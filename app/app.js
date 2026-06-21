@@ -1,10 +1,12 @@
 let activeTicketId = null;
 let liveTickets = [];
+let queueFilter = 'all';
 
 function init() {
   renderTicketList();
   selectTicket(tickets[0].id);
   loadLiveTickets();
+  setInterval(loadLiveTickets, 15000); // auto-refresh the shared queue
 }
 
 // Pull the shared ticket queue from the server (Vercel + Redis). Silently
@@ -19,6 +21,15 @@ async function loadLiveTickets() {
   } catch (e) { /* no /api backend — demo-only mode */ }
 }
 
+function setFilter(f) {
+  queueFilter = f;
+  document.querySelectorAll('.qf-btn').forEach(b =>
+    b.classList.toggle('active', b.dataset.f === f));
+  renderTicketList();
+}
+
+const statusOf = (t, isLive) => isLive ? (t.status || 'open') : 'open';
+
 function escapeHtml(s) {
   return String(s == null ? '' : s).replace(/[&<>"']/g,
     c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
@@ -31,25 +42,33 @@ function ticketTime(iso) {
 
 function renderTicketList() {
   const list = document.getElementById('ticket-list');
-  const itemHtml = (t, isLive) => `
-    <div class="ticket-item ${activeTicketId === t.id ? 'active' : ''}"
+  const itemHtml = (t, isLive) => {
+    const status = statusOf(t, isLive);
+    return `
+    <div class="ticket-item ${activeTicketId === t.id ? 'active' : ''} ${status === 'resolved' ? 'resolved' : ''}"
          onclick="selectTicket('${t.id}')" data-id="${t.id}">
       <div class="ticket-meta">
         <span class="priority-dot ${t.priority}"></span>
         <span class="ticket-id">${escapeHtml(t.id)}</span>
         ${isLive ? '<span class="live-tag">LIVE</span>' : ''}
+        ${status === 'resolved' ? '<span class="resolved-tag">RESOLVED</span>' : ''}
         <span class="ticket-time">${isLive ? ticketTime(t.createdAt) : t.time}</span>
       </div>
       <div class="ticket-title">${escapeHtml(t.title)}</div>
       <div class="ticket-user">${escapeHtml(t.user)} · ${escapeHtml(t.location)}</div>
     </div>`;
+  };
 
-  list.innerHTML =
-    liveTickets.map(t => itemHtml(t, true)).join('') +
-    tickets.map(t => itemHtml(t, false)).join('');
+  const match = (t, isLive) => queueFilter === 'all' || statusOf(t, isLive) === queueFilter;
+  const liveHtml = liveTickets.filter(t => match(t, true)).map(t => itemHtml(t, true)).join('');
+  const demoHtml = tickets.filter(t => match(t, false)).map(t => itemHtml(t, false)).join('');
 
+  list.innerHTML = (liveHtml + demoHtml) ||
+    '<div class="no-data" style="padding:16px">No tickets match this filter.</div>';
+
+  const openCount = liveTickets.filter(t => statusOf(t, true) === 'open').length + tickets.length;
   const badge = document.querySelector('.badge-live');
-  if (badge) badge.textContent = (liveTickets.length + tickets.length) + ' active';
+  if (badge) badge.textContent = openCount + ' active';
 }
 
 function selectTicket(id) {
@@ -161,11 +180,13 @@ async function submitNewTicket() {
 // ── Render a stored live ticket (real diagnostic result) ──
 function renderLiveTicketCenter(t) {
   const d = t.diagnostic;
+  const resolved = (t.status || 'open') === 'resolved';
   document.getElementById('center').innerHTML = `
     <div class="ticket-header-card">
       <div class="ticket-header-info">
         <div class="ticket-header-id">${escapeHtml(t.id)} · opened ${ticketTime(t.createdAt)} · live ticket</div>
-        <div class="ticket-header-title">${escapeHtml(t.title)}</div>
+        <div class="ticket-header-title">${escapeHtml(t.title)}
+          ${resolved ? '<span class="resolved-tag">RESOLVED</span>' : ''}</div>
         <div class="ticket-header-meta">
           <span>👤 ${escapeHtml(t.user)}</span>
           <span>📍 ${escapeHtml(t.location)}</span>
@@ -175,6 +196,10 @@ function renderLiveTicketCenter(t) {
     </div>
     ${diagnosticHtml(d)}
     <div class="actions-row">
+      ${resolved
+        ? `<button class="btn btn-secondary" onclick="setTicketStatus('${t.id}','open')">↩ Reopen</button>`
+        : `<button class="btn btn-primary" onclick="setTicketStatus('${t.id}','resolved')">✓ Mark resolved</button>`}
+      <button class="btn btn-danger" onclick="deleteLiveTicket('${t.id}')">Delete</button>
       <button class="btn btn-secondary" onclick="showNewTicketForm()">+ New ticket</button>
     </div>`;
 
@@ -183,11 +208,45 @@ function renderLiveTicketCenter(t) {
       <div class="right-section-title">Ticket detail</div>
       <div class="affected-user-detail" style="line-height:1.9">
         <strong>ID</strong> ${escapeHtml(t.id)}<br>
+        <strong>Status</strong> ${resolved ? 'Resolved' : 'Open'}<br>
         <strong>Opened</strong> ${escapeHtml(new Date(t.createdAt).toLocaleString())}<br>
+        ${resolved && t.resolvedAt ? `<strong>Resolved</strong> ${escapeHtml(new Date(t.resolvedAt).toLocaleString())}<br>` : ''}
         <strong>Target</strong> <span style="font-family:var(--mono)">${escapeHtml(t.target)}</span><br>
         <strong>Verdict</strong> ${escapeHtml(d.diagnosis.rootCause)}
       </div>
     </div>`;
+}
+
+async function setTicketStatus(id, status) {
+  try {
+    const res = await fetch('/api/tickets', {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ id, status })
+    });
+    const data = await res.json();
+    if (!res.ok || data.error) { alert(data.error || ('HTTP ' + res.status)); return; }
+    const i = liveTickets.findIndex(t => t.id === id);
+    if (i >= 0) liveTickets[i] = data.ticket;
+    renderTicketList();
+    if (activeTicketId === id) renderLiveTicketCenter(data.ticket);
+  } catch (e) {
+    alert('Could not update — the /api backend only runs on Vercel.');
+  }
+}
+
+async function deleteLiveTicket(id) {
+  if (!confirm('Delete this ticket permanently?')) return;
+  try {
+    const res = await fetch('/api/tickets?id=' + encodeURIComponent(id), { method: 'DELETE' });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok || data.error) { alert(data.error || ('HTTP ' + res.status)); return; }
+    liveTickets = liveTickets.filter(t => t.id !== id);
+    if (activeTicketId === id) { activeTicketId = null; selectTicket(tickets[0].id); }
+    else renderTicketList();
+  } catch (e) {
+    alert('Could not delete — the /api backend only runs on Vercel.');
+  }
 }
 
 // ── Live network check (real diagnostics via /api/diagnose) ──

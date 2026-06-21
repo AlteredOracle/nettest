@@ -1,6 +1,9 @@
 // Shared ticket store backed by Upstash Redis (REST API, called via fetch).
 // No npm dependency required. Works with either the Upstash-native env vars or
 // the Vercel KV integration env vars — whichever the project has.
+//
+// Tickets are stored in a Redis HASH keyed by ticket id, so update / delete /
+// resolve by id are single operations.
 
 function creds() {
   const url = process.env.KV_REST_API_URL || process.env.UPSTASH_REDIS_REST_URL;
@@ -18,7 +21,7 @@ function detectedCredentialKeys() {
   return Object.keys(process.env).filter(k => /(REDIS|KV|UPSTASH)/i.test(k)).sort();
 }
 
-// Run a single Redis command, e.g. ['LPUSH', key, value].
+// Run a single Redis command, e.g. ['HSET', key, field, value].
 async function redis(command) {
   const c = creds();
   if (!c) throw new Error('NO_STORE');
@@ -34,19 +37,47 @@ async function redis(command) {
   return data.result;
 }
 
-const KEY = 'netpilot:tickets';
-const MAX = 200;
+const KEY = 'netpilot:tickets:h';
 
-async function addTicket(ticket) {
-  await redis(['LPUSH', KEY, JSON.stringify(ticket)]);
-  await redis(['LTRIM', KEY, '0', String(MAX - 1)]); // keep the list bounded
-}
-
-async function listTickets() {
-  const arr = await redis(['LRANGE', KEY, '0', String(MAX - 1)]);
-  return (arr || [])
+// HGETALL may come back as a flat [field, value, …] array or an object.
+function parseHash(reply) {
+  if (!reply) return [];
+  let values = [];
+  if (Array.isArray(reply)) {
+    for (let i = 1; i < reply.length; i += 2) values.push(reply[i]);
+  } else if (typeof reply === 'object') {
+    values = Object.values(reply);
+  }
+  return values
     .map(s => { try { return JSON.parse(s); } catch (e) { return null; } })
     .filter(Boolean);
 }
 
-module.exports = { isConfigured, detectedCredentialKeys, addTicket, listTickets };
+async function addTicket(ticket) {
+  await redis(['HSET', KEY, ticket.id, JSON.stringify(ticket)]);
+}
+
+async function listTickets() {
+  const list = parseHash(await redis(['HGETALL', KEY]));
+  list.sort((a, b) => String(b.createdAt || '').localeCompare(String(a.createdAt || '')));
+  return list;
+}
+
+async function getTicket(id) {
+  const s = await redis(['HGET', KEY, id]);
+  if (!s) return null;
+  try { return JSON.parse(s); } catch (e) { return null; }
+}
+
+async function updateTicket(ticket) {
+  await redis(['HSET', KEY, ticket.id, JSON.stringify(ticket)]);
+}
+
+async function deleteTicket(id) {
+  return (await redis(['HDEL', KEY, id])) > 0;
+}
+
+module.exports = {
+  isConfigured, detectedCredentialKeys,
+  addTicket, listTickets, getTicket, updateTicket, deleteTicket
+};

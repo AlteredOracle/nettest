@@ -208,6 +208,56 @@ body {
   border-radius: 8px;
 }
 
+/* ── Queue filter ── */
+.queue-filter {
+  display: flex;
+  gap: 4px;
+  padding: 8px 12px;
+  border-bottom: 1px solid var(--border);
+  background: var(--surface);
+  position: sticky;
+  top: 39px;
+  z-index: 1;
+}
+
+.qf-btn {
+  flex: 1;
+  font-family: var(--sans);
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--text2);
+  background: var(--surface2);
+  border: 1px solid transparent;
+  border-radius: 20px;
+  padding: 4px 8px;
+  cursor: pointer;
+  transition: all 0.12s;
+}
+.qf-btn:hover { background: var(--border); }
+.qf-btn.active { background: var(--accent); color: #fff; }
+
+/* ── Resolved tickets ── */
+.ticket-item.resolved .ticket-title { text-decoration: line-through; color: var(--text3); }
+.ticket-item.resolved { opacity: 0.7; }
+
+.resolved-tag {
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.5px;
+  color: var(--green);
+  background: var(--green-bg);
+  padding: 1px 5px;
+  border-radius: 8px;
+}
+
+/* ── Danger button ── */
+.btn-danger {
+  background: var(--surface);
+  color: var(--red);
+  border: 1px solid #f5c6c3;
+}
+.btn-danger:hover { background: var(--red-bg); }
+
 /* ── New ticket form ── */
 .form-grid {
   display: grid;
